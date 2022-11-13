@@ -47,9 +47,9 @@ def generate_launch_description():
                             'urdf',
                             'lidar.urdf.xacro')
 
-    camera_xacro = os.path.join(get_package_share_directory('vehicle_simulator'),
+    rgbd_camera_xacro = os.path.join(get_package_share_directory('vehicle_simulator'),
                             'urdf',
-                            'camera.urdf.xacro')
+                            'rgbd_camera.urdf.xacro')
 
     spawn_robot = Node(package='gazebo_ros', executable='spawn_entity.py',
                         arguments=['-file', robot_xacro,
@@ -61,9 +61,9 @@ def generate_launch_description():
                                 '-entity', 'lidar'],
                     output='screen')
             
-    spawn_camera = Node(package='gazebo_ros', executable='spawn_entity.py',
-                    arguments=['-file', camera_xacro,
-                                '-entity', 'camera'],
+    spawn_rgbd_camera = Node(package='gazebo_ros', executable='spawn_entity.py',
+                    arguments=['-file', rgbd_camera_xacro,
+                                '-entity', 'rgbd_camera'],
                     output='screen')
 
     return LaunchDescription([
@@ -80,6 +80,6 @@ def generate_launch_description():
         gazebo,
         spawn_robot,
         spawn_lidar,
-        spawn_camera,
+        spawn_rgbd_camera,
         joy
     ])
