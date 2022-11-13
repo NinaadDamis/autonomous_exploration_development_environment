@@ -401,7 +401,7 @@ int main(int argc, char** argv)
   // ros::Publisher pubModelState = nh.advertise<gazebo_msgs::ModelState>("/gazebo/set_model_state", 5);
   // auto pubModelState = nh->create_publisher<gazebo_msgs::msg::EntityState>("/gazebo/set_model_state", 5);
   gazebo_msgs::msg::EntityState cameraState;
-  cameraState.name = "camera";
+  cameraState.name = "rgbd_camera";
   gazebo_msgs::msg::EntityState lidarState;
   lidarState.name = "lidar";
   gazebo_msgs::msg::EntityState robotState;
