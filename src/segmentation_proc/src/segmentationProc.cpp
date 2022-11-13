@@ -2,14 +2,16 @@
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <ros/ros.h>
+#include <iostream>
+#include "rclcpp/rclcpp.hpp"
 
-#include <nav_msgs/Odometry.h>
-#include <sensor_msgs/PointCloud2.h>
-#include <visualization_msgs/MarkerArray.h>
+#include "nav_msgs/msg/odometry.hpp"
+#include "sensor_msgs/msg/point_cloud2.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
-#include <tf/transform_datatypes.h>
-#include <tf/transform_broadcaster.h>
+#include "tf2/transform_datatypes.h"
+#include "tf2_ros/transform_broadcaster.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 #include <pcl_conversions/pcl_conversions.h>
 #include <pcl/point_cloud.h>
@@ -22,7 +24,7 @@ const double PI = 3.1415926;
 string seg_file_dir;
 int segDisplayInterval = 2;
 int segDisplayCount = 0;
-
+tf2::Quaternion quat_tf;
 // define region point
 struct RegionPoint {
      float x, y, z;
@@ -81,8 +83,10 @@ double systemTime = 0;
 float vehicleRoll = 0, vehiclePitch = 0, vehicleYaw = 0;
 float vehicleX = 0, vehicleY = 0, vehicleZ = 0;
 
-sensor_msgs::PointCloud2 regionAll2, objectAll2;
-visualization_msgs::MarkerArray regionMarkerArray, objectMarkerArray;
+// sensor_msgs::PointCloud2 regionAll2, objectAll2;
+sensor_msgs::msg::PointCloud2 regionAll2, objectAll2;
+// visualization_msgs::MarkerArray regionMarkerArray, objectMarkerArray;
+visualization_msgs::msg::MarkerArray regionMarkerArray, objectMarkerArray;
 
 int readSegmentationFile(const char *filename)
 {
@@ -320,13 +324,14 @@ int readSegmentationFile(const char *filename)
   return 1;
 }
 
-void odometryHandler(const nav_msgs::Odometry::ConstPtr& odom)
+void odometryHandler(const nav_msgs::msg::Odometry::ConstSharedPtr odom)
 {
-  systemTime = odom->header.stamp.toSec();
+  // systemTime = odom->header.stamp.toSec();
+  systemTime = std::chrono::duration<double>(std::chrono::nanoseconds(odom->header.stamp.nanosec)).count();
 
   double roll, pitch, yaw;
-  geometry_msgs::Quaternion geoQuat = odom->pose.pose.orientation;
-  tf::Matrix3x3(tf::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w)).getRPY(roll, pitch, yaw);
+  geometry_msgs::msg::Quaternion geoQuat = odom->pose.pose.orientation;
+  tf2::Matrix3x3(tf2::Quaternion(geoQuat.x, geoQuat.y, geoQuat.z, geoQuat.w)).getRPY(roll, pitch, yaw);
 
   vehicleRoll = roll;
   vehiclePitch = pitch;
@@ -338,22 +343,33 @@ void odometryHandler(const nav_msgs::Odometry::ConstPtr& odom)
 
 int main(int argc, char** argv)
 {
-  ros::init(argc, argv, "segmentationProc");
-  ros::NodeHandle nh;
-  ros::NodeHandle nhPrivate = ros::NodeHandle("~");
+  // ros::init(argc, argv, "segmentationProc");
+  // ros::NodeHandle nh;
+  // ros::NodeHandle nhPrivate = ros::NodeHandle("~");
+  rclcpp::init(argc, argv);
+  auto nh = rclcpp::Node::make_shared("segmentationProc");
 
-  nhPrivate.getParam("seg_file_dir", seg_file_dir);
-  nhPrivate.getParam("segDisplayInterval", segDisplayInterval);
+  // nhPrivate.getParam("seg_file_dir", seg_file_dir);
+  // nhPrivate.getParam("segDisplayInterval", segDisplayInterval);
+  nh->declare_parameter<std::string>("seg_file_dir", seg_file_dir);
+  nh->declare_parameter<int>("segDisplayInterval", segDisplayInterval);
+  nh->get_parameter("seg_file_dir", seg_file_dir);
+  nh->get_parameter("segDisplayInterval", segDisplayInterval);
 
-  ros::Subscriber subOdometry = nh.subscribe<nav_msgs::Odometry> ("/state_estimation", 5, odometryHandler);
+  // ros::Subscriber subOdometry = nh.subscribe<nav_msgs::Odometry> ("/state_estimation", 5, odometryHandler);
+  auto subOdometry = nh->create_subscription<nav_msgs::msg::Odometry>("/state_estimation", 5, odometryHandler);
 
-  ros::Publisher pubRegion = nh.advertise<sensor_msgs::PointCloud2> ("/region_segmentations", 5);
+  // ros::Publisher pubRegion = nh.advertise<sensor_msgs::PointCloud2> ("/region_segmentations", 5);
+  auto pubRegion = nh->create_publisher<sensor_msgs::msg::PointCloud2>("/region_segmentations", 5);
 
-  ros::Publisher pubObject = nh.advertise<sensor_msgs::PointCloud2> ("/object_segmentations", 5);
+  // ros::Publisher pubObject = nh.advertise<sensor_msgs::PointCloud2> ("/object_segmentations", 5);
+  auto pubObject = nh->create_publisher<sensor_msgs::msg::PointCloud2>("/object_segmentations", 5);
 
-  ros::Publisher pubRegionMarker = nh.advertise<visualization_msgs::MarkerArray>("region_segmentation_markers", 10);
+  // ros::Publisher pubRegionMarker = nh.advertise<visualization_msgs::MarkerArray>("region_segmentation_markers", 10);
+  auto pubRegionMarker = nh->create_publisher<visualization_msgs::msg::MarkerArray>("/region_segmentation_markers", 10);
 
-  ros::Publisher pubObjectMarker = nh.advertise<visualization_msgs::MarkerArray>("object_segmentation_markers", 10);
+  // ros::Publisher pubObjectMarker = nh.advertise<visualization_msgs::MarkerArray>("object_segmentation_markers", 10);
+  auto pubObjectMarker = nh->create_publisher<visualization_msgs::msg::MarkerArray>("/object_segmentation_markers", 10);
 
   // read segmentation file
   if (readSegmentationFile(seg_file_dir.c_str()) != 1) {
@@ -366,15 +382,16 @@ int main(int argc, char** argv)
 
   // prepare marker array messages
   int regionNum = regionAll->points.size();
-  visualization_msgs::MarkerArray regionMarkerArray;
+  visualization_msgs::msg::MarkerArray regionMarkerArray;
   regionMarkerArray.markers.resize(regionNum);
   for (int i = 0; i < regionNum; i++) {
     regionMarkerArray.markers[i].header.frame_id = "map";
-    regionMarkerArray.markers[i].header.stamp = ros::Time().fromSec(systemTime);
+    // regionMarkerArray.markers[i].header.stamp = ros::Time().fromSec(systemTime);
+    regionMarkerArray.markers[i].header.stamp = rclcpp::Time(static_cast<uint64_t>(systemTime * 1e9));
     regionMarkerArray.markers[i].ns = "region";
     regionMarkerArray.markers[i].id = regionAll->points[i].region_index;
-    regionMarkerArray.markers[i].action = visualization_msgs::Marker::ADD;
-    regionMarkerArray.markers[i].type = visualization_msgs::Marker::CUBE;
+    regionMarkerArray.markers[i].action = visualization_msgs::msg::Marker::ADD;
+    regionMarkerArray.markers[i].type = visualization_msgs::msg::Marker::CUBE;
     regionMarkerArray.markers[i].pose.position.x = (regionAll->points[i].box_min_x + regionAll->points[i].box_max_x) / 2.0;
     regionMarkerArray.markers[i].pose.position.y = (regionAll->points[i].box_min_y + regionAll->points[i].box_max_y) / 2.0;
     regionMarkerArray.markers[i].pose.position.z = (regionAll->points[i].box_min_z + regionAll->points[i].box_max_z) / 2.0;
@@ -392,20 +409,23 @@ int main(int argc, char** argv)
   }
 
   int objectNum = objectAll->points.size();
-  visualization_msgs::MarkerArray objectMarkerArray;
+  visualization_msgs::msg::MarkerArray objectMarkerArray;
   objectMarkerArray.markers.resize(objectNum);
   for (int i = 0; i < objectNum; i++) {
     objectMarkerArray.markers[i].header.frame_id = "map";
-    objectMarkerArray.markers[i].header.stamp = ros::Time().fromSec(systemTime);
+    // objectMarkerArray.markers[i].header.stamp = ros::Time().fromSec(systemTime);
+    objectMarkerArray.markers[i].header.stamp = rclcpp::Time(static_cast<uint64_t>(systemTime * 1e9));
     objectMarkerArray.markers[i].ns = "object";
     objectMarkerArray.markers[i].id = objectAll->points[i].object_index;
-    objectMarkerArray.markers[i].action = visualization_msgs::Marker::ADD;
-    objectMarkerArray.markers[i].type = visualization_msgs::Marker::CUBE;
+    objectMarkerArray.markers[i].action = visualization_msgs::msg::Marker::ADD;
+    objectMarkerArray.markers[i].type = visualization_msgs::msg::Marker::CUBE;
     objectMarkerArray.markers[i].pose.position.x = objectAll->points[i].x;
     objectMarkerArray.markers[i].pose.position.y = objectAll->points[i].y;
     objectMarkerArray.markers[i].pose.position.z = objectAll->points[i].z;
-    objectMarkerArray.markers[i].pose.orientation = tf::createQuaternionMsgFromRollPitchYaw
-                                                    (0, 0, atan2(objectAll->points[i].axis0_y, objectAll->points[i].axis0_x));
+    quat_tf.setRPY(0,0,atan2(objectAll->points[i].axis0_y, objectAll->points[i].axis0_x));
+    tf2::convert(quat_tf, objectMarkerArray.markers[i].pose.orientation);
+    // objectMarkerArray.markers[i].pose.orientation = tf2::createQuaternionMsgFromRollPitchYaw
+    //                                                 (0, 0, atan2(objectAll->points[i].axis0_y, objectAll->points[i].axis0_x));
     objectMarkerArray.markers[i].scale.x = 2.0 * objectAll->points[i].radius_x;
     objectMarkerArray.markers[i].scale.y = 2.0 * objectAll->points[i].radius_y;
     objectMarkerArray.markers[i].scale.z = 2.0 * objectAll->points[i].radius_z;
@@ -417,31 +437,36 @@ int main(int argc, char** argv)
 
   printf("\nRead %d regions and %d objects.\n\n", regionNum, objectNum);
 
-  ros::Rate rate(100);
-  bool status = ros::ok();
+  // ros::Rate rate(100);
+  // bool status = ros::ok();
+  rclcpp::Rate rate(100);
+  bool status = rclcpp::ok();
   while (status) {
-    ros::spinOnce();
-
+    // ros::spinOnce();
+    rclcpp::spin_some(nh);
     segDisplayCount++;
     if (segDisplayCount >= 100 * segDisplayInterval) {
       // publish point clouds with regions
-      regionAll2.header.stamp = ros::Time().fromSec(systemTime);
+      // regionAll2.header.stamp = ros::Time().fromSec(systemTime);
+      regionAll2.header.stamp = rclcpp::Time(static_cast<uint64_t>(systemTime * 1e9));
       regionAll2.header.frame_id = "map";
-      pubRegion.publish(regionAll2);
+      pubRegion->publish(regionAll2);
 
       // publish point clouds with objects
-      objectAll2.header.stamp = ros::Time().fromSec(systemTime);
+      // objectAll2.header.stamp = ros::Time().fromSec(systemTime);
+      objectAll2.header.stamp = rclcpp::Time(static_cast<uint64_t>(systemTime * 1e9));
       objectAll2.header.frame_id = "map";
-      pubObject.publish(objectAll2);
+      pubObject->publish(objectAll2);
 
       // publish marker arrays
-      pubRegionMarker.publish(regionMarkerArray);
-      pubObjectMarker.publish(objectMarkerArray);
+      pubRegionMarker->publish(regionMarkerArray);
+      pubObjectMarker->publish(objectMarkerArray);
 
       segDisplayCount = 0;
     }
 
-    status = ros::ok();
+    // status = ros::ok();
+    status = rclcpp::ok();
     rate.sleep();
   }
 
