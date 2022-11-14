@@ -69,12 +69,12 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument(
             'world',
-            default_value=[os.path.join(get_package_share_directory('vehicle_simulator'), 'world', 'garage.world')],
+            default_value=[os.path.join(get_package_share_directory('vehicle_simulator'), 'world', 'matterport.world')],
             description='SDF world file',
         ),
         DeclareLaunchArgument(
             'gui',
-            default_value='false',
+            default_value='true',
             description='Run headless if false',
         ),
         gazebo,
