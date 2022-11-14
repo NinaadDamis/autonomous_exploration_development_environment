@@ -74,7 +74,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'gui',
-            default_value='false',
+            default_value='true',
             description='Run headless if false',
         ),
         gazebo,
